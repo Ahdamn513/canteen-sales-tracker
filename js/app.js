@@ -53,20 +53,93 @@ function calculateTotal() {
   return total;
 }
 
+// Reads a number from an input. Returns NaN if the box is empty or not a number.
+function readNumber(input) {
+  const text = input.value.trim();
+  return text === "" ? NaN : Number(text);
+}
+
+// A price is valid if it is a real number greater than 0
+function isValidPrice(price) {
+  return Number.isFinite(price) && price > 0;
+}
+
+// A quantity is valid if it is a whole number of at least 1
+function isValidQty(qty) {
+  return Number.isInteger(qty) && qty >= 1;
+}
+
+// ===== VALIDATION FUNCTIONS =====
+
+// Checks the item form values in order (name, price, quantity).
+// Returns the first error message, or "" if everything is valid.
+function validateItem(name, price, qty) {
+  if (name === "") {
+    return "Item name must not be empty.";
+  }
+  if (!isValidPrice(price)) {
+    return "Price must be a number greater than 0.";
+  }
+  if (!isValidQty(qty)) {
+    return "Quantity must be a whole number of at least 1.";
+  }
+  return "";
+}
+
+// Returns the input that caused the first item error, so we can focus it.
+// Uses the same checks and the same order as validateItem().
+function getInvalidItemField(name, price, qty) {
+  if (name === "") {
+    return itemNameInput;
+  }
+  if (!isValidPrice(price)) {
+    return itemPriceInput;
+  }
+  return itemQtyInput;
+}
+
+// Blocks completing an order that has no items.
+// Returns an error message, or "" if the order has items.
+function validateOrder() {
+  if (currentOrder.length === 0) {
+    return "Cannot complete an empty order. Add at least one item first.";
+  }
+  return "";
+}
+
+// Checks the cash received against the order total.
+// Returns an error message, or "" if the payment is enough.
+function validatePayment(cash, total) {
+  if (Number.isNaN(cash)) {
+    return "Enter the cash received as a number.";
+  }
+  if (cash < total) {
+    return "Cash received is less than the order total of " + formatPeso(total) + ".";
+  }
+  return "";
+}
+
 // ===== ORDER FUNCTIONS =====
 
-// Reads the item form and adds the item to the current order
+// Reads the item form, validates it, and adds the item to the current order
 function addItem() {
-  const item = {
-    name: itemNameInput.value.trim(),
-    price: parseFloat(itemPriceInput.value),
-    qty: parseInt(itemQtyInput.value, 10)
-  };
+  const name = itemNameInput.value.trim();
+  const price = readNumber(itemPriceInput);
+  const qty = readNumber(itemQtyInput);
 
-  currentOrder.push(item);
+  // Stop and show the first error if anything is invalid
+  const error = validateItem(name, price, qty);
+  if (error) {
+    showMessage(error, "error");
+    getInvalidItemField(name, price, qty).focus();
+    return;
+  }
+
+  currentOrder.push({ name: name, price: price, qty: qty });
   renderOrder();
   itemForm.reset();
   itemNameInput.focus();
+  showMessage("Item added: " + name, "success");
 }
 
 // Removes one line from the order using its position in the array
@@ -132,9 +205,25 @@ function updateChange() {
 
 // ===== PAYMENT AND SUMMARY FUNCTIONS =====
 
-// Adds the finished order to the daily summary, then resets for the next customer
+// Validates the payment, adds the order to the daily summary, then resets
 function completeOrder() {
+  // Reject an empty order
+  const orderError = validateOrder();
+  if (orderError) {
+    showMessage(orderError, "error");
+    itemNameInput.focus();
+    return;
+  }
+
+  // Reject missing or insufficient cash
   const total = calculateTotal();
+  const cash = readNumber(cashInput);
+  const paymentError = validatePayment(cash, total);
+  if (paymentError) {
+    showMessage(paymentError, "error");
+    cashInput.focus();
+    return;
+  }
 
   dailySummary.customersServed += 1;
   dailySummary.totalSales += total;

@@ -148,6 +148,78 @@ The AI produced a complete `js/app.js`. State is kept in a `currentOrder` array 
 
 ---
 
+## Prompt #3: Add input validation
+**Stage:** Add input validation (Commit #4)
+
+**1. Prompt used:**
+```text
+CONTEXT
+I'm continuing my "Canteen Sales Tracker" practice project (HTML, CSS,
+vanilla JavaScript, no frameworks). My js/app.js already has working core
+functionality. I've tested it and found these problems:
+- Empty fields add items with NaN values
+- Zero and negative prices are accepted
+- Zero, negative, and decimal quantities are accepted
+- Orders can be completed when cash is less than the total
+- An empty order can be completed and counts as a customer
+
+Existing pieces you should reuse (do not rewrite them):
+- showMessage(text, type) where type is "success" or "error"
+- addItem() reads the form and pushes { name, price, qty } to currentOrder
+- completeOrder() adds the order to dailySummary
+- calculateTotal() returns the order total
+- Inputs: item-name, item-price, item-qty, cash-received
+
+TASK
+Add input validation ONLY. Do not change any other behavior.
+Rules:
+1. Item name must not be empty (trim whitespace first).
+2. Price must be a number greater than 0.
+3. Quantity must be a whole number of at least 1 (reject decimals).
+4. Cash received must be a number and must not be less than the order
+   total.
+5. Completing an empty order is not allowed.
+
+Behavior:
+- If validation fails, do NOT add the item or complete the order, and
+  show a clear error message using showMessage(..., "error"). The message
+  should say exactly what is wrong (e.g., "Quantity must be a whole
+  number of at least 1.").
+- Report the first error found, one message at a time.
+- After a failed item validation, put the cursor back in the field that
+  caused the error.
+- When an item is added successfully, show a success message such as
+  "Item added: Fried Rice".
+
+CONSTRAINTS
+- Vanilla JavaScript, edit js/app.js only. Do not change the HTML or CSS.
+- Write separate validation functions with clear names, for example
+  validateItem(name, price, qty) and validatePayment(cash, total), that
+  return an error message string, or an empty string if valid.
+- Keep the existing function and variable names.
+- Add short comments explaining each new function.
+
+OUTPUT FORMAT
+Show only the new and changed functions, each in its own code block, with
+a note saying where each one goes in the file. Then give a short table of
+test inputs and the expected result for each rule.
+```
+
+**2. AI-generated response (summary):**
+The AI produced new helper functions (`readNumber`, `isValidPrice`, `isValidQty`) and validation functions (`validateItem`, `getInvalidItemField`, `validateOrder`, `validatePayment`) that return an error message string, or an empty string when the input is valid. It replaced `addItem()` so it validates before adding, shows the first error, focuses the faulty field, and shows a success message. It also replaced `completeOrder()` so it rejects an empty order and missing or insufficient cash. The AI noted that the old `parseInt` on quantity silently accepted decimals like `1.5`, so the new code reads raw values with `Number()`. It also gave a test table with expected results for each rule.
+
+**3. Evaluation:**
+- What worked: The prompt listed the exact rules, the existing function names to reuse, and the output format, so the response fit into my code without renaming anything. Returning a string from each validator (empty string means valid) made the logic easy to follow. [Add what you observed, e.g., error messages appeared correctly and the cursor jumped to the right field.]
+- What was wrong or missing: Validation covers the five rules only. Problems that remain: "Fried Rice" and "fried rice" are counted as different items in the summary, and decimal prices such as `0.1 × 3` may cause floating-point rounding issues. [Add any other issues you found.]
+- How I tested it: I ran every row of the test table: empty name, price of `0` and `-5`, quantity of `0`, `-2`, and `1.5`, empty cash, cash lower than the total, cash equal to the total, and completing an empty order. I also tested a case with several errors at once to confirm only the first error shows. [Mention anything extra you tried.]
+
+**4. Modifications I made:**
+- [e.g., reworded the error message for price to "Please enter a price greater than 0."]
+- [Add anything else you changed]
+- I merged the changes into one complete `app.js` and confirmed there is only one `addItem` and one `completeOrder` function.
+
+---
+
 ## Bugs Found and Fixed
 | # | Bug description | How I found it | Fix | Commit |
 |---|---|---|---|---|
