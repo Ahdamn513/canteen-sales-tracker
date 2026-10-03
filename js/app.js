@@ -6,7 +6,9 @@ const currentOrder = [];
 const dailySummary = {
   customersServed: 0,
   totalSales: 0,
-  itemCounts: {} // e.g., { "Fried Rice": 5, "Juice": 3 } (total quantity sold per item)
+  // FIX 2: a Map from normalized item name -> { displayName, qty }
+  // e.g., "fried rice" -> { displayName: "Fried Rice", qty: 4 }
+  itemCounts: new Map()
 };
 
 // ===== DOM REFERENCES =====
@@ -35,6 +37,19 @@ function formatPeso(amount) {
   });
 }
 
+// FIX 1: Rounds a peso amount to 2 decimal places and never returns -0.
+// Number.EPSILON nudges values like 1.005 so they round the way people expect.
+function roundMoney(amount) {
+  const rounded = Math.round((amount + Number.EPSILON) * 100) / 100;
+  return rounded || 0; // -0 is falsy, so this turns -0 into 0
+}
+
+// FIX 2: Makes an item name comparable: trimmed, lowercase, one space between words.
+// "  Fried   RICE " -> "fried rice"
+function normalizeName(name) {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 // Shows a message in the message area. type is "success" or "error".
 function showMessage(text, type) {
   messageArea.innerHTML = ""; // clear any previous message
@@ -44,13 +59,18 @@ function showMessage(text, type) {
   messageArea.appendChild(message);
 }
 
-// Adds up every line's subtotal (price x quantity) in the current order
+// FIX 1: Subtotal of one order line (price x quantity), rounded to centavos
+function getSubtotal(item) {
+  return roundMoney(item.price * item.qty);
+}
+
+// FIX 1: Adds up every line's rounded subtotal, then rounds the sum
 function calculateTotal() {
   let total = 0;
   for (const item of currentOrder) {
-    total += item.price * item.qty;
+    total += getSubtotal(item);
   }
-  return total;
+  return roundMoney(total);
 }
 
 // Reads a number from an input. Returns NaN if the box is empty or not a number.
@@ -107,13 +127,14 @@ function validateOrder() {
   return "";
 }
 
-// Checks the cash received against the order total.
+// FIX 1: Checks the cash received against the order total.
+// Both sides are rounded to centavos, so 0.3 is accepted for a 0.1 x 3 order.
 // Returns an error message, or "" if the payment is enough.
 function validatePayment(cash, total) {
   if (Number.isNaN(cash)) {
     return "Enter the cash received as a number.";
   }
-  if (cash < total) {
+  if (roundMoney(cash) < roundMoney(total)) {
     return "Cash received is less than the order total of " + formatPeso(total) + ".";
   }
   return "";
@@ -155,7 +176,7 @@ function createCell(text) {
   return cell;
 }
 
-// Redraws the whole order table, then updates total and change
+// FIX 1: Redraws the whole order table (using getSubtotal so the rows match the total)
 function renderOrder() {
   orderTableBody.innerHTML = ""; // clear old rows
 
@@ -174,7 +195,7 @@ function renderOrder() {
       row.appendChild(createCell(item.name));
       row.appendChild(createCell(formatPeso(item.price)));
       row.appendChild(createCell(item.qty));
-      row.appendChild(createCell(formatPeso(item.price * item.qty)));
+      row.appendChild(createCell(formatPeso(getSubtotal(item))));
 
       // Action cell with a Remove button
       const actionCell = document.createElement("td");
@@ -196,16 +217,26 @@ function renderOrder() {
   updateChange();
 }
 
-// Computes change = cash received - order total, and displays it
+// FIX 1: Computes change = cash received - order total, rounded so it never shows -₱0.00
 function updateChange() {
-  const cash = parseFloat(cashInput.value) || 0; // empty input counts as 0
-  const change = cash - calculateTotal();
+  const cash = roundMoney(parseFloat(cashInput.value) || 0); // empty input counts as 0
+  const change = roundMoney(cash - calculateTotal());
   changeAmountEl.textContent = formatPeso(change);
 }
 
 // ===== PAYMENT AND SUMMARY FUNCTIONS =====
 
-// Validates the payment, adds the order to the daily summary, then resets
+// FIX 2: Adds one order line to the day's item counts, using a normalized key.
+// The first spelling entered that day is kept as the display name.
+function recordItemSale(item) {
+  const key = normalizeName(item.name);
+  if (!dailySummary.itemCounts.has(key)) {
+    dailySummary.itemCounts.set(key, { displayName: item.name, qty: 0 });
+  }
+  dailySummary.itemCounts.get(key).qty += item.qty;
+}
+
+// FIX 1 and FIX 2: Validates the payment, records the sale, then resets
 function completeOrder() {
   // Reject an empty order
   const orderError = validateOrder();
@@ -226,15 +257,11 @@ function completeOrder() {
   }
 
   dailySummary.customersServed += 1;
-  dailySummary.totalSales += total;
+  dailySummary.totalSales = roundMoney(dailySummary.totalSales + total); // FIX 1: no drift
 
-  // Add each line's quantity to that item's running total
+  // FIX 2: add each line's quantity under its normalized item name
   for (const item of currentOrder) {
-    if (dailySummary.itemCounts[item.name]) {
-      dailySummary.itemCounts[item.name] += item.qty;
-    } else {
-      dailySummary.itemCounts[item.name] = item.qty;
-    }
+    recordItemSale(item);
   }
 
   // Reset the current order and payment section
@@ -246,14 +273,15 @@ function completeOrder() {
   showMessage("Order completed. Total recorded: " + formatPeso(total), "success");
 }
 
-// Finds the item with the highest total quantity sold today
+// FIX 2: Finds the item with the highest total quantity sold today
+// (case-insensitive, because the counts are stored by normalized name)
 function getMostSoldItem() {
   let topName = "None yet";
   let topQty = 0;
-  for (const name in dailySummary.itemCounts) {
-    if (dailySummary.itemCounts[name] > topQty) {
-      topQty = dailySummary.itemCounts[name];
-      topName = name;
+  for (const entry of dailySummary.itemCounts.values()) {
+    if (entry.qty > topQty) {
+      topQty = entry.qty;
+      topName = entry.displayName;
     }
   }
   return topName;
@@ -266,7 +294,7 @@ function updateSummary() {
   mostSoldItemEl.textContent = getMostSoldItem();
 }
 
-// Resets the daily summary after the user confirms
+// FIX 2: Resets the daily summary after the user confirms
 function clearDay() {
   const confirmed = confirm("Clear all sales for the day? This cannot be undone.");
   if (!confirmed) {
@@ -275,7 +303,7 @@ function clearDay() {
 
   dailySummary.customersServed = 0;
   dailySummary.totalSales = 0;
-  dailySummary.itemCounts = {};
+  dailySummary.itemCounts = new Map(); // start with a fresh, empty Map
   updateSummary();
   showMessage("Daily summary cleared.", "success");
 }
